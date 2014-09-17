@@ -3,7 +3,7 @@ module Tactics.Nat.Semiring where
 
 -- SECTION : importing the entire standard library and then some
 
-open import Function using (id; _∘_; type-signature; flip)
+open import Function using (id; _∘_; flip)
 open import Data.Nat using (_+_; _*_; ℕ; zero; suc; _≤_; _⊔_; decTotalOrder) renaming (_≟_ to _≟-ℕ_)
 open import Data.Nat.Properties using (module SemiringSolver; m≤m⊔n; ⊔-⊓-0-isCommutativeSemiringWithoutOne)
 open import Algebra.Structures using (module IsCommutativeSemiringWithoutOne)
@@ -18,7 +18,7 @@ open import Data.Empty using (⊥-elim)
 import Relation.Nullary.Decidable as Dec
 open import Reflection
 open import Data.Maybe using (Maybe; nothing; just)
-open import Data.Product using (_×_; _,_; uncurry; ∃; proj₁; proj₂; ,_; Σ) renaming (map to mapΣ)
+open import Data.Product using (_×_; _,_; uncurry; ∃; proj₁; proj₂; ,_; Σ-syntax) renaming (map to mapΣ)
 open import Data.Vec.N-ary using (N-ary-level; curryⁿ; Eqʰ; Eqʰ-to-Eq; uncurry-∀ⁿ; _$ⁿ_; left-inverse)
 open import Function.Equivalence using (module Equivalence)
 open import Function.Equality using (_⟨$⟩_)
@@ -107,22 +107,22 @@ record OpenEquation : Set where
 -- SECTION : helpers for Fin and Vec
 
 private
-  push : ∀ {a} {A : Set a} (_=?_ : Decidable (_≡_ {A = A})) → 
+  push : ∀ {a} {A : Set a} →
        ∀ {n} {x q} {xs : Vec A n} → (q ≢ x)
-       → Σ[ i ∶ Fin (suc n) ] (x ∷ xs [ i ]= q)
-       → Σ[ i ∶ Fin n ] (xs [ i ]= q)
-  push _=?_ ne (._        , here) = ⊥-elim (ne refl)
-  push _=?_ ne (Fin.suc i , there xs[i]=x) = i , xs[i]=x
+       → Σ[ i ∈ Fin (suc n) ] (x ∷ xs [ i ]= q)
+       → Σ[ i ∈ Fin n ] (xs [ i ]= q)
+  push ne (._        , here) = ⊥-elim (ne refl)
+  push ne (Data.Fin.suc i , there xs[i]=x) = i , xs[i]=x
 
 locate : ∀ {a} {A : Set a} (_=?_ : Decidable (_≡_ {A = A})) →
-         ∀ {n} (xs : Vec A n) → (q : A)  → Dec (Σ[ i ∶ Fin n ] (xs [ i ]= q))
+         ∀ {n} (xs : Vec A n) → (q : A)  → Dec (Σ[ i ∈ Fin n ] (xs [ i ]= q))
 locate _ [] q = no because
   where
-  because : ¬ (Σ[ i ∶ Fin zero ] ([] [ i ]= q))
+  because : ¬ (Σ[ i ∈ Fin zero ] ([] [ i ]= q))
   because (() , _)
 locate _=?_ ( x ∷ xs) q with q =? x
 locate _=?_ (.q ∷ xs) q | yes refl = yes (Fin.zero , here)
-locate _=?_ ( x ∷ xs) q | no ¬p = Dec.map′ (mapΣ Fin.suc there) (push _=?_ ¬p) (locate _=?_ xs q)
+locate _=?_ ( x ∷ xs) q | no ¬p = Dec.map′ (mapΣ Fin.suc there) (push ¬p) (locate _=?_ xs q)
 
 complement : ∀ {n} (i : Fin n) → ℕ
 complement {suc n} Data.Fin.zero = n
@@ -134,9 +134,9 @@ explicits : ∀ {X} → List (Arg X) → List X
 explicits {X} = gfilter isExplicit
   where
   isExplicit : Arg X → Maybe X
-  isExplicit (arg visible r x) = just x
-  isExplicit (arg hidden r x) = nothing
-  isExplicit (arg instance r x) = nothing
+  isExplicit (arg (arg-info visible r) x) = just x
+  isExplicit (arg (arg-info hidden r) x) = nothing
+  isExplicit (arg (arg-info instance′ r) x) = nothing
 
 find-var : Term → AnswerM ℕ
 find-var t (n , ts) with locate _≟_ ts t
@@ -150,14 +150,14 @@ carry-in (suc k) = mapA (λ x → ocon (suc k) o+ x)
 mutual
   two-args : ℕ → List (Arg Term) → AnswerM (OpenPolynomial × OpenPolynomial)
   two-args k [] = tko "no args, need 2" []
-  two-args k (arg visible r a ∷ []) = ako "1 arg, need 2" [ arg visible r a ]
-  two-args k (arg visible _ a ∷ arg visible _ b ∷ []) = mapA _,_ (interpret-expr k a) ⊛ interpret-expr 0 b
+  two-args k (arg (arg-info visible r) a ∷ []) = ako "1 arg, need 2" [ arg (arg-info visible r) a ]
+  two-args k (arg (arg-info visible _) a ∷ arg (arg-info visible _) b ∷ []) = mapA _,_ (interpret-expr k a) ⊛ interpret-expr 0 b
   two-args k as = ako "need 2 args, found something else" as
 
   interpret-suc' : ℕ → Arg Term → AnswerM OpenPolynomial
-  interpret-suc' k (arg visible r x) = interpret-expr (suc k) x
-  interpret-suc' k (arg hidden r x) = ako "suc with implicit arg" [ arg hidden r x ]
-  interpret-suc' k (arg instance r x) = ako "suc with instance arg" [ arg instance r x ]
+  interpret-suc' k (arg (arg-info visible r) x) = interpret-expr (suc k) x
+  interpret-suc' k (arg (arg-info hidden r) x) = ako "suc with implicit arg" [ arg (arg-info hidden r) x ]
+  interpret-suc' k (arg (arg-info instance′ r) x) = ako "suc with instance′ance arg" [ arg (arg-info instance′ r) x ]
 
   interpret-suc : ℕ → List (Arg Term) → AnswerM OpenPolynomial
   interpret-suc k [] = tko "suc without args" []
@@ -176,6 +176,8 @@ mutual
   interpret-expr k (def f args) | no _ with f ≟-Name q*
   interpret-expr k (def f args) | no _ | yes _ = carry-in k (mapA (uncurry _o*_) (two-args 0 args))
   interpret-expr k (def f args) | no _ | no _ = carry-in k (mapA ovar (find-var (def f args)))
+  interpret-expr k (lit (nat n)) = pureA (ocon (k + n))
+  interpret-expr k (lit l) = tko "non-nat literal" [ lit l ]
   interpret-expr k t = carry-in k (mapA ovar (find-var t))
 
 
@@ -200,8 +202,7 @@ interpret-top t = Ans.tko "not an equation" [ t ]
 -- SECTION : quoting things by hand
 
 quote-ℕ : ℕ → Term
-quote-ℕ zero = con qZ []
-quote-ℕ (suc n) = con qS (arg visible relevant (quote-ℕ n) ∷ [])
+quote-ℕ n = lit (nat n)
 
 quote-Vec : ∀ {a} {A : Set a} → (A → Term) → ∀ {n} → Vec A n → Term
 quote-Vec {A = A} quote-A = body
@@ -209,23 +210,22 @@ quote-Vec {A = A} quote-A = body
   body : ∀ {n} → Vec A n → Term
   body [] = con (quote Vec.[]) []
   body (_∷_ {n = n} x xs)
-    = con (quote Vec._∷_) ( arg hidden  relevant (quote-ℕ n)
-                          ∷ arg visible relevant (quote-A x)
-                          ∷ arg visible relevant (body xs)
+    = con (quote Vec._∷_) (arg (arg-info visible relevant) (quote-A x)
+                          ∷ arg (arg-info visible relevant) (body xs)
                           ∷ [])
 
 quote-Fin : ∀ {n} → Fin n → Term
-quote-Fin (Fin.zero {n}) = con (quote Fin.zero)
-                               [ arg hidden relevant (quote-ℕ n) ]
-quote-Fin (Fin.suc {n} i) = con (quote Fin.suc)
-                                (arg hidden  relevant (quote-ℕ n) ∷
-                                 arg visible relevant (quote-Fin i) ∷ [])
+quote-Fin (Data.Fin.zero {n}) = con (quote Fin.zero)
+                                    [ arg (arg-info hidden relevant) (quote-ℕ n) ]
+quote-Fin (Data.Fin.suc {n} i) = con (quote Fin.suc)
+                                     (arg (arg-info hidden  relevant) (quote-ℕ n) ∷
+                                      arg (arg-info visible relevant) (quote-Fin i) ∷ [])
 
 quote-Polynomial : ∀ {n} → Polynomial n → Term
 quote-Polynomial {n} = run
   where
   infix 10 ‼_
-  ‼_ = arg visible relevant
+  ‼_ = arg (arg-info visible relevant)
   c[+] = Term.con (quote RSg.[+]) []
   c[*] = Term.con (quote RSg.[*]) []
   c-op = λ o → Term.con (quote RSg.op) ∘ mapL (‼_) ∘ (_∷_ o)
@@ -244,11 +244,11 @@ quote-Polynomial {n} = run
 
 quote-prove : ClosedEquation → Term
 quote-prove eqn = def (quote prove)
-                      (arg hidden  relevant (quote-ℕ depth) ∷
-                       arg visible relevant (quote-Vec id env) ∷
-                       arg visible relevant (quote-Polynomial lhs) ∷
-                       arg visible relevant (quote-Polynomial rhs) ∷
-                       arg visible relevant (con (quote refl) []) ∷
+                      (arg (arg-info hidden  relevant) (quote-ℕ depth) ∷
+                       arg (arg-info visible relevant) (quote-Vec id env) ∷
+                       arg (arg-info visible relevant) (quote-Polynomial lhs) ∷
+                       arg (arg-info visible relevant) (quote-Polynomial rhs) ∷
+                       arg (arg-info visible relevant) (con (quote refl) []) ∷
                        [])
   where open ClosedEquation eqn
 
